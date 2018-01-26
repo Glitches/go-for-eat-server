@@ -18,19 +18,19 @@ const authorize = async (ctx, next) => {
 
 const routes = function (app) {
   router
-    .post('/auth', usersController.auth)
-    .get('/user/:id', authorize,, usersController.getUser)
-    .put('/user/:id', authorize,, usersController.rating)
-    .get('/me', authorize, usersController.me)
-    .put('/me', authorize, usersController.edit)
+    .post('/api/v1/auth', usersController.auth)
+    .get('/api/v1/user/:id', authorize, usersController.getUser)
+    .put('/api/v1/user/:id', authorize, usersController.rating)
+    .get('/api/v1/me', authorize, usersController.me)
+    .put('/api/v1/me', authorize, usersController.edit)
 
-    .post('/event', authorize, eventsController.createEvent)
-    .put('/event/:id', authorize, eventsController.editEvent)
-    .delete('/event/:id', authorize, eventsController.deleteEvent)
-    .get('/event/:id', authorize, eventsController.getEvent)
-    .post('/event/:id/join', authorize, eventsController.joinEvent)
-    .post('/event/:id/leave', authorize, eventsController.leaveEvent)
-    .get('/events/:latlng/:from/:to', authorize, eventsController.getEvents)
+    .post('/api/v1/event', authorize, eventsController.createEvent)
+    .put('/api/v1/event/:id', authorize, eventsController.editEvent)
+    .delete('/api/v1/event/:id', authorize, eventsController.deleteEvent)
+    .get('/api/v1/event/:id', authorize, eventsController.getEvent)
+    .post('/api/v1/event/:id/join', authorize, eventsController.joinEvent)
+    .post('/api/v1/event/:id/leave', authorize, eventsController.leaveEvent)
+    .get('/api/v1/events/:latlng/:from/:to', authorize, eventsController.getEvents)
 
     .options('/', options)
     .trace('/', trace)
