@@ -32,6 +32,7 @@ const userDB = async (userData) => {
 
 module.exports.auth = async (ctx, next) => {
   if ('POST' != ctx.method) return await next();
+  console.log('auth', ctx.request.body);
   if (ctx.request.body.network == 'facebook') {
     try {
       let authResult = await axios.get(config.facebook.validateUrl+config.facebook.fields, {
@@ -39,7 +40,7 @@ module.exports.auth = async (ctx, next) => {
           'Authorization': 'Bearer ' + ctx.request.body.accessToken,
         }
       });
-      console.log('authResult', authResult);
+      // console.log('authResult', authResult);
       if (authResult.id == ctx.request.body.id) {
         let user = {
           'name': authResult.name,
