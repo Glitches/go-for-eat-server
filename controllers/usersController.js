@@ -31,64 +31,66 @@ const userDB = async (userData) => {
 };
 
 module.exports.auth = async (ctx, next) => {
-	if ('POST' != ctx.method) return await next();
-	if (ctx.request.body.network == 'facebook') {
-		try {
-			let authResult = await axios.get(config.facebook.validateUrl+config.facebook.fields, {
-				headers: {
-					'Authorization': 'Bearer ' + ctx.request.body.accessToken,
-				}
-			});
-			console.log('authResult', authResult);
-			if (authResult.id == ctx.request.body.id) {
-				let user = {
-					'name': authResult.name,
-					'email': authResult.email,
-					'profile_picture': authResult.picture.data.url,
-					'birthday':authResult.birthday,
-					'gender': authResult.gender,
-					'accessToken': 'FB' + ctx.request.body.accessToken,
-				};
-				user = await userDB(user);
-				console.log('user', user);
-				if (user.email) {
-					ctx.status = 200;
-					ctx.body = JSON.stringify({'user': user});
-					return;
-				}
-			}
-		} catch(e) { console.error('Facebook validate error'); }
-	} else if (ctx.request.body.network == 'google') {
-		// console.log('google ctx.request.body', ctx.request.body);
-		try {
-			let authResult = await axios.get(config.google.validateUrl + ctx.request.body.idToken, {
-				headers: {
-					'Authorization': 'Bearer ' + ctx.request.body.accessToken,
-				}
-			});
-			console.log('authResult', authResult.data);
-			if (authResult.data.sub == ctx.request.body.id) {
-				let user = {
-					'name': authResult.data.name,
-					'email': authResult.data.email,
-					'profile_picture': authResult.data.picture,
-					'birthday':authResult.data.birthday,
-					'gender': authResult.data.gender,
-					'accessToken': 'GO' + ctx.request.body.accessToken,
-				};
-				user = await userDB(user);
-				console.log('user', user);
-				if (user.email) {
-					ctx.status = 200;
-					ctx.body = JSON.stringify({'user': user});
-					return;
-				}
-			}
-		} catch(e) { console.error('Google validate error'); }
-	} if (ctx.request.body.network == 'linkedin') {
-		console.log('linkedin ctx.request.body', ctx.request.body);
-	}
-	ctx.status = 404;
+  if ('POST' != ctx.method) return await next();
+  console.log('auth', ctx.request.body);
+  if (ctx.request.body.network == 'facebook') {
+    try {
+      let authResult = await axios.get(config.facebook.validateUrl+config.facebook.fields, {
+        headers: {
+          'Authorization': 'Bearer ' + ctx.request.body.accessToken,
+        }
+      });
+      // console.log('authResult', authResult);
+      if (authResult.id == ctx.request.body.id) {
+        let user = {
+          'name': authResult.name,
+          'email': authResult.email,
+          'profile_picture': authResult.picture.data.url,
+          'birthday':authResult.birthday,
+          'gender': authResult.gender,
+          'accessToken': 'FB' + ctx.request.body.accessToken,
+        };
+        user = await userDB(user);
+        console.log('user', user);
+        if (user.email) {
+          ctx.status = 200;
+          ctx.body = JSON.stringify({'user': user});
+          return;
+        }
+      }
+    } catch(e) { console.error('Facebook validate error'); }
+  } else if (ctx.request.body.network == 'google') {
+    // console.log('google ctx.request.body', ctx.request.body);
+    try {
+      let authResult = await axios.get(config.google.validateUrl + ctx.request.body.idToken, {
+        headers: {
+          'Authorization': 'Bearer ' + ctx.request.body.accessToken,
+        }
+      });
+
+      console.log('authResult', authResult.data);
+      if (authResult.data.sub == ctx.request.body.id) {
+        let user = {
+          'name': authResult.data.name,
+          'email': authResult.data.email,
+          'profile_picture': authResult.data.picture,
+          'birthday':authResult.data.birthday,
+          'gender': authResult.data.gender,
+          'accessToken': 'GO' + ctx.request.body.accessToken,
+        };
+        user = await userDB(user);
+        console.log('user', user);
+        if (user.email) {
+          ctx.status = 200;
+          ctx.body = JSON.stringify({'user': user});
+          return;
+        }
+      }
+    } catch(e) { console.error('Google validate error'); }
+  } if (ctx.request.body.network == 'linkedin') {
+    console.log('linkedin ctx.request.body', ctx.request.body);
+  }
+  ctx.status = 404;
 };
 
 module.exports.getUser = async (ctx, next) => {
