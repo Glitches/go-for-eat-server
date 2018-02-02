@@ -20,6 +20,7 @@ const userDB = async (userData) => {
       userData.ratings_number = userData.ratings_average = '0';
       userData.description = userData.profession = '';
       userData.interests = [];
+      console.log('userData', userData);
       return Users.insert(userData);
       // eslint-disable-next-line no-console
     } catch (e) { console.error('Users.insert', e); }
@@ -148,7 +149,7 @@ module.exports.auth = async (ctx, next) => {
               'Authorization': `Bearer ${ctx.request.body.accessToken}`,
             }
           });
-        const birthday = `${data.birthdays[1].date.month}\\${data.birthdays[1].date.day}\\${data.birthdays[1].date.  year}`;
+        const birthday = `${data.birthdays[1].date.month}\${data.birthdays[1].date.day}\${data.birthdays[1].date.year}`;
         let user = {
           'name': authResult.data.given_name,
           'email': authResult.data.email,
