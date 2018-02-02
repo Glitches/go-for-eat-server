@@ -1,59 +1,71 @@
 'use strict';
-
-const usersController = require('./controllers/usersController');
-const eventsController = require('./controllers/eventsController');
-const ratingController = require('./controllers/ratingController');
-const restaurntsController = require('./controllers/restaurntsController');
-
 const router = require('koa-router')();
 
-const authorize = async (ctx, next) => {
-  if (!ctx.user) {
-    ctx.status = 401;
-    return;
-  }
+const usersController = require('./controllers/usersController');
+const EventsController = require('./controllers/eventsController');
+const ratingsController = require('./controllers/ratingsController');
 
-  await next();
+// MongoDb configure
+const monk = require('monk');
+const db = monk(process.env.MONGOLAB_URI);
+
+// Creating Db instances
+const Events = db.get('events');
+const Users = db.get('users');
+
+// Geo Indexing for MongoDb 
+Events.createIndex( { location : "2dsphere" } );
+
+const eventsController = new EventsController(Events, monk);
+
+
+const authorize = async (ctx, next) => {
+	if (!ctx.user) {
+		ctx.status = 401;
+		return;
+	}
+
+	await next();
 };
 
 const routes = function (app) {
-  router
-    .post('/auth', usersController.auth)
-    .get('/user/:id', authorize,, usersController.getUser)
-    .put('/user/:id', authorize,, usersController.rating)
-    .get('/me', authorize, usersController.me)
-    .put('/me', authorize, usersController.edit)
+	router
+		.post('/api/v1/auth', usersController.auth)
+		.get('/api/v1/users/:id', authorize, usersController.getUser)
+		.get('/api/v1/me', authorize, usersController.me)
+		.put('/api/v1/me', authorize, usersController.edit)
+		.put('/api/v1/users/:id', authorize, ratingsController.rating)
 
-    .post('/event', authorize, eventsController.createEvent)
-    .put('/event/:id', authorize, eventsController.editEvent)
-    .delete('/event/:id', authorize, eventsController.deleteEvent)
-    .get('/event/:id', authorize, eventsController.getEvent)
-    .post('/event/:id/join', authorize, eventsController.joinEvent)
-    .post('/event/:id/leave', authorize, eventsController.leaveEvent)
-    .get('/events/:latlng/:from/:to', authorize, eventsController.getEvents)
+		.post('/api/v1/events', authorize, eventsController.createEvent.bind(eventsController))
+		.put('/api/v1/events/:id', authorize, eventsController.editEvent.bind(eventsController))
+		.delete('/api/v1/events/:id', authorize, eventsController.deleteEvent.bind(eventsController))
+		.get('/api/v1/events/:id', authorize, eventsController.getEvent.bind(eventsController))
+		.put('/api/v1/events/:id/users', authorize, eventsController.joinEvent.bind(eventsController))
+		.delete('/api/v1/events/:id/users', authorize, eventsController.leaveEvent.bind(eventsController))
+		.get('/api/v1/events', authorize, eventsController.getEvents.bind(eventsController))
 
-    .options('/', options)
-    .trace('/', trace)
-    .head('/', head);
+		.options('/', options)
+		.trace('/', trace)
+		.head('/', head);
 
-  app
-    .use(router.routes())
-    .use(router.allowedMethods());
+	app
+		.use(router.routes())
+		.use(router.allowedMethods());
 
-  return app;
+	return app;
 };
 
 
 const head = async () => {
-  return;
+	return;
 };
 
 const options = async () => {
-  this.body = 'Allow: HEAD,GET,PUT,DELETE,OPTIONS';
+	this.body = 'Allow: HEAD,GET,PUT,DELETE,OPTIONS';
 };
 
 const trace = async () => {
-  this.body = 'Smart! But you can\'t trace.';
+	this.body = 'Smart! But you can\'t trace.';
 };
 
 module.exports = routes;
