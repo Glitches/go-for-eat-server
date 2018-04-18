@@ -2,28 +2,88 @@
 const axios = require('axios');
 const config = require('../config.js');
 const filterProps = require('../services/utils').filterProps;
+const Raven = require('raven');
+
+Raven.config(process.env.SENTRY_DSN).install();
+
+const regexLat = /^[-+]?([1-8]?\d(\.\d+)?|90(\.0+)?)$/;
+const regexLng = /^[-+]?(180(\.0+)?|((1[0-7]\d)|([1-9]?\d))(\.\d+)?)$/;
+
+const aggregateQuery = [
+  {
+    $geoNear: {
+      near: { type: 'Point', coordinates: [] },
+      distanceField: 'distance',
+      spherical: true
+    }
+  },
+  {
+    $lookup: {
+      from: 'users',
+      localField: 'attendees',
+      foreignField: '_id',
+      as: 'attendees'
+    }
+  },
+  {
+    $project: {
+      'attendees.email': 0,
+      'attendees.birthday': 0,
+      'attendees.gender': 0,
+      'attendees.events': 0,
+      'attendees.created_events': 0,
+      'attendees.accessToken': 0,
+      'attendees.ratings_number': 0,
+      'attendees.profession': 0,
+      'attendees.description': 0,
+      'attendees.interests': 0
+    }
+  }
+];
+
+let user = {
+  name: '',
+  email: '',
+  profile_picture: '',
+  birthday: '',
+  gender: '',
+  position: '',
+  accessToken: ''
+};
 
 class UsersController {
-  constructor (Users, Events, monk) {
+  constructor (Users, Events, monk, Ratings) {
     this.Users = Users;
     this.Events = Events;
     this.monk = monk;
+    this.Ratings = Ratings;
+  }
+
+  async _fetchCreatedEvents (user, position) {
+    aggregateQuery[0].$geoNear.near.coordinates = [position.lng, position.lat];
+    // do not change monk.id
+    aggregateQuery[0].$geoNear.query = { creator: this.monk.id(user._id) };
+    return await this.Events.aggregate(aggregateQuery);
+  }
+
+  async _fetchAttendedEvents (user, position) {
+    aggregateQuery[0].$geoNear.near.coordinates = [position.lng, position.lat];
+    // do not change monk.id
+    aggregateQuery[0].$geoNear.query = { attendees: this.monk.id(user._id) };
+    return await this.Events.aggregate(aggregateQuery);
   }
 
   async _userDB (userData) {
-    // console.log('_userDB:', userData);
     const user = await this.Users.findOne({ email: userData.email });
-    // console.log('findOne:', user);
     if (!user) {
       try {
-        // console.log('new user');
-        userData.ratings_number = userData.ratings_average = '0';
+        userData.ratings_number = userData.ratings_average = 0;
         userData.description = userData.profession = '';
-        userData.interests = [];
-        return this.Users.insert(userData);
+        userData.interests = '';
+        return await this.Users.insert(userData);
       } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('this.Users.insert', e);
+        Raven.captureException(e);
+        ctx.status = 500;
       }
     } else {
       try {
@@ -36,222 +96,171 @@ class UsersController {
               profile_picture: userData.profile_picture,
               birthday: userData.birthday,
               gender: userData.gender,
+              position: userData.position,
               accessToken: userData.accessToken
             }
           }
         );
-        // console.log('update user');
         return await this.Users.findOne({ email: userData.email });
       } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('Update user error', e);
+        Raven.captureException(e);
+        ctx.status = 500;
       }
     }
   }
 
   async auth (ctx, next) {
     if ('POST' != ctx.method) return await next();
-    // console.log('auth', ctx.request.body);
+    if (!ctx.request.body.position.lat) {
+      ctx.status = 400;
+      ctx.body = 'Latitude coordinate not present';
+    }
+    if (!ctx.request.body.position.lat) {
+      ctx.status = 400;
+      ctx.body = 'Longitude coordinate not present';
+    }
+    if (!ctx.request.body.position) {
+      ctx.status = 400;
+      ctx.body = 'Position field not sent';
+    }
+    if (
+      !regexLat.test(ctx.request.body.position.lat) ||
+      !regexLng.test(ctx.request.body.position.lng)
+    ) {
+      ctx.status = 400;
+      ctx.body = 'Bad position coordinates';
+    }
     if (ctx.request.body.network == 'facebook') {
       try {
         const authResult = await axios.get(
           config.facebook.validateUrl + config.facebook.fields,
           {
             headers: {
-              Authorization: 'Bearer ' + ctx.request.body.accessToken
+              Authorization: `Bearer ${ctx.request.body.accessToken}`
             }
           }
         );
-        // console.log('authResult', authResult);
         if (authResult.data.id == ctx.request.body.id) {
-          let user = {
+          user = {
             name: authResult.data.first_name,
             email: authResult.data.email,
             profile_picture: authResult.data.picture.data.url,
             birthday: authResult.data.birthday,
             gender: authResult.data.gender,
-            events: [],
-            created_events: [],
-            accessToken: 'FB' + ctx.request.body.accessToken
+            position: ctx.request.body.position,
+            accessToken: `FB${ctx.request.body.accessToken}`
           };
           user = await this._userDB(user);
-          // console.log('request.body', ctx.request.body)
-          user.events = await this.Events.aggregate([
-            { $match: { attendees: this.monk.id(user._id) } },
-            {
-              $lookup: {
-                from: 'users',
-                localField: 'attendees',
-                foreignField: '_id',
-                as: 'attendees'
-              }
-            },
-            {
-              $project: {
-                'attendees.email': 0,
-                'attendees.birthday': 0,
-                'attendees.gender': 0,
-                'attendees.events': 0,
-                'attendees.created_events': 0,
-                'attendees.accessToken': 0,
-                'attendees.ratings_average': 0,
-                'attendees.ratings_number': 0,
-                'attendees.profession': 0,
-                'attendees.description': 0,
-                'attendees.interests': 0
-              }
-            }
-          ]);
-
-          user.created_events = await this.Events.aggregate([
-            { $match: { creator: this.monk.id(user._id) } },
-            {
-              $lookup: {
-                from: 'users',
-                localField: 'attendees',
-                foreignField: '_id',
-                as: 'attendees'
-              }
-            },
-            {
-              $project: {
-                'attendees.email': 0,
-                'attendees.birthday': 0,
-                'attendees.gender': 0,
-                'attendees.events': 0,
-                'attendees.created_events': 0,
-                'attendees.accessToken': 0,
-                'attendees.ratings_average': 0,
-                'attendees.ratings_number': 0,
-                'attendees.profession': 0,
-                'attendees.description': 0,
-                'attendees.interests': 0
-              }
-            }
-          ]);
-          // console.log('events', events)
-          // console.log('user', user);
+          user.created_events = await this._fetchCreatedEvents(
+            user,
+            ctx.request.body.position
+          );
+          user.events = await this._fetchAttendedEvents(
+            user,
+            ctx.request.body.position
+          );
           if (user.email) {
             ctx.status = 200;
-            ctx.body = JSON.stringify({ user: user });
+            ctx.body = { user };
             return;
           }
         }
       } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('Facebook validate error', e);
+        Raven.captureException(e);
+        ctx.status = 500;
       }
     } else if (ctx.request.body.network == 'google') {
-      // console.log('google ctx.request.body', ctx.request.body);
       try {
         const authResult = await axios.get(
           config.google.validateUrl + ctx.request.body.idToken,
           {
             headers: {
-              Authorization: 'Bearer ' + ctx.request.body.accessToken
+              Authorization: `Bearer ${ctx.request.body.accessToken}`
             }
           }
         );
-        // console.log('authResult', authResult.data);
         if (authResult.data.sub == ctx.request.body.id) {
-          const { data } = await axios.get(
-            'https://people.googleapis.com/v1/people/me?personFields=birthdays',
-            {
-              headers: {
-                Authorization: `Bearer ${ctx.request.body.accessToken}`
-              }
+          const { data } = await axios.get(config.google.birthdayRequest, {
+            headers: {
+              Authorization: `Bearer ${ctx.request.body.accessToken}`
             }
-          );
-          const birthday = `${data.birthdays[1].date.month}\\${
-            data.birthdays[1].date.day
-          }\\${data.birthdays[1].date.year}`;
-          let user = {
+          });
+          user = {
             name: authResult.data.given_name,
             email: authResult.data.email,
             profile_picture: authResult.data.picture,
-            birthday: birthday,
+            birthday: data.birthdays[1]
+              ? `${data.birthdays[1].date.month}/${
+                data.birthdays[1].date.day
+              }/${data.birthdays[1].date.year}`
+              : '',
             gender: authResult.data.gender,
-            accessToken: 'GO' + ctx.request.body.accessToken
+            position: ctx.request.body.position,
+            accessToken: `GO${ctx.request.body.accessToken}`
           };
-          // console.log('user', user);
           user = await this._userDB(user);
-          user.events = await this.Events.aggregate([
-            { $match: { attendees: this.monk.id(user._id) } },
-            {
-              $lookup: {
-                from: 'users',
-                localField: 'attendees',
-                foreignField: '_id',
-                as: 'attendees'
-              }
-            },
-            {
-              $project: {
-                'attendees.email': 0,
-                'attendees.birthday': 0,
-                'attendees.gender': 0,
-                'attendees.events': 0,
-                'attendees.created_events': 0,
-                'attendees.accessToken': 0,
-                'attendees.ratings_average': 0,
-                'attendees.ratings_number': 0,
-                'attendees.profession': 0,
-                'attendees.description': 0,
-                'attendees.interests': 0
-              }
-            }
-          ]);
-
-          user.created_events = await Events.aggregate([
-            { $match: { creator: this.monk.id(user._id) } },
-            {
-              $lookup: {
-                from: 'users',
-                localField: 'attendees',
-                foreignField: '_id',
-                as: 'attendees'
-              }
-            },
-            {
-              $project: {
-                'attendees.email': 0,
-                'attendees.birthday': 0,
-                'attendees.gender': 0,
-                'attendees.events': 0,
-                'attendees.created_events': 0,
-                'attendees.accessToken': 0,
-                'attendees.ratings_average': 0,
-                'attendees.ratings_number': 0,
-                'attendees.profession': 0,
-                'attendees.description': 0,
-                'attendees.interests': 0
-              }
-            }
-          ]);
-
+          user.created_events = await this._fetchCreatedEvents(
+            user,
+            ctx.request.body.position
+          );
+          user.events = await this._fetchAttendedEvents(
+            user,
+            ctx.request.body.position
+          );
           if (user.email) {
-            // console.log('google user', user);
             ctx.status = 200;
-            ctx.body = JSON.stringify({ user: user });
+            ctx.body = { user };
             return;
           }
         }
       } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('Google validate error', e);
+        Raven.captureException(e);
+        ctx.status = 500;
+      }
+    } else if (ctx.request.body.network == 'linkedin') {
+      try {
+        const authResult = await axios.get(config.linkedin.apiUrl, {
+          headers: {
+            Authorization: `Bearer ${ctx.request.body.accessToken}`
+          }
+        });
+        if (authResult.data.id == ctx.request.body.id) {
+          user = {
+            name: authResult.data.formattedName,
+            email: authResult.data.emailAddress,
+            profile_picture: authResult.data.picture.data.pictureUrl,
+            profession: authResult.data.position,
+            position: ctx.request.body.position,
+            accessToken: `LI${ctx.request.body.accessToken}`
+          };
+          user = await this._userDB(user);
+          user.created_events = await this._fetchCreatedEvents(
+            user,
+            ctx.request.body.position
+          );
+          user.events = await this._fetchAttendedEvents(
+            user,
+            ctx.request.body.position
+          );
+          if (user.email) {
+            ctx.status = 200;
+            ctx.body = { user };
+            return;
+          }
+        }
+      } catch (e) {
+        Raven.captureException(e);
+        ctx.status = 500;
       }
     }
-    if (ctx.request.body.network == 'linkedin') {
-      // console.log('linkedin ctx.request.body', ctx.request.body);
-    }
-    ctx.status = 400;
   }
 
   async getUser (ctx, next) {
     if ('GET' != ctx.method) return await next();
     try {
-      let user = await this.Users.findOne({ _id: ctx.params.id });
-      if (!user) throw `User ${ctx.params.id} not found in Db`;
+      const paramId = ctx.params.id;
+      let user = await this.Users.findOne({ _id: paramId });
+      if (!user) return (ctx.status = 404);
       user = filterProps(user, [
         '_id',
         'name',
@@ -264,17 +273,36 @@ class UsersController {
         'description',
         'profession'
       ]);
+      user.myRating = await this.Ratings.findOne({
+        user_id: paramId,
+        author: ctx.user._id
+      });
       ctx.status = 200;
       ctx.body = user;
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('Get user error', e);
-      cts.status = 404;
+      Raven.captureException(e);
+      cts.status = 500;
     }
   }
 
   async me (ctx, next) {
     if ('GET' != ctx.method) return await next();
+    if (!ctx.request.query.lat || !ctx.request.query.lng)
+      return (ctx.status = 400);
+    if (
+      !regexLat.test(ctx.request.query.lat) ||
+      !regexLng.test(ctx.request.query.lng)
+    )
+      return (ctx.status = 400);
+    const position = {
+      lat: Number(ctx.request.query.lat),
+      lng: Number(ctx.request.query.lng)
+    };
+    ctx.user.created_events = await this._fetchCreatedEvents(
+      ctx.user,
+      position
+    );
+    ctx.user.events = await this._fetchAttendedEvents(ctx.user, position);
     ctx.status = 200;
     ctx.body = ctx.user;
   }
@@ -282,40 +310,54 @@ class UsersController {
   async editUser (ctx, next) {
     if ('PUT' != ctx.method) return await next();
     try {
-      if (
-        ctx.request.body.edit.interests &&
-        ctx.request.body.edit.interests.length >= 4
-      ) {
-        ctx.request.body.edit.interests.splice(4);
+      const update = { $set: {} };
+      if (ctx.request.body.edit.interests) {
+        update.$set.interests =
+          ctx.request.body.edit.interests.length >= 140
+            ? ctx.request.body.edit.interests.substring(0, 139)
+            : ctx.request.body.edit.interests;
       }
-      if (
-        ctx.request.body.edit.description &&
-        ctx.request.body.edit.description.length >= 4
-      ) {
-        ctx.request.body.edit.description = ctx.request.body.edit.description.substring(
-          0,
-          139
-        );
+      if (ctx.request.body.edit.description) {
+        update.$set.description =
+          ctx.request.body.edit.description.length >= 140
+            ? ctx.request.body.edit.description.substring(0, 139)
+            : ctx.request.body.edit.description;
       }
-      if (
-        ctx.request.body.edit.profession &&
-        ctx.request.body.edit.profession.length >= 4
-      ) {
-        ctx.request.body.edit.profession = ctx.request.body.edit.profession.substring(
-          0,
-          140
-        );
+      if (ctx.request.body.edit.profession) {
+        update.$set.profession =
+          ctx.request.body.edit.profession.length >= 140
+            ? ctx.request.body.edit.profession.substring(0, 139)
+            : ctx.request.body.edit.profession;
       }
-      const user = await this.Users.update(
+      if (ctx.request.body.edit.position) {
+        if (
+          !ctx.request.body.edit.position.lng ||
+          !ctx.request.body.edit.position.lat
+        ) {
+          ctx.status = 400;
+          ctx.body = 'Missing position parameters';
+          return;
+        }
+        if (
+          !regexLat.test(ctx.request.body.edit.position.lat) ||
+          !regexLng.test(ctx.request.body.edit.position.lng)
+        ) {
+          ctx.status = 400;
+          ctx.body = 'Bad position coordinates';
+          return;
+        }
+        update.$set.position;
+      }
+      const resultUpdate = await this.Users.update(
         { _id: ctx.user._id },
-        ctx.request.body.edit
+        update
       );
-      if (user.nMatched === 0) throw `User ${ctx.params.id} not found in Db`;
+      if (!resultUpdate.nMatched) return (ctx.status = 404);
+      ctx.body = await this.Users.findOne({ _id: ctx.user._id });
       ctx.status = 204;
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('Edit user error', e);
-      ctx.status = 404;
+      Raven.captureException(e);
+      ctx.status = 500;
     }
   }
 }

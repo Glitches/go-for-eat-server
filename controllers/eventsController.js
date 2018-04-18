@@ -1,14 +1,16 @@
 'use strict';
 
 const config = require('../config.js');
+const Raven = require('raven');
+
+Raven.config(process.env.SENTRY_DSN).install();
 
 const regexLat = /^[-+]?([1-8]?\d(\.\d+)?|90(\.0+)?)$/;
 const regexLng = /^[-+]?(180(\.0+)?|((1[0-7]\d)|([1-9]?\d))(\.\d+)?)$/;
 
 class EventsController {
-  constructor (Events, monk) {
+  constructor (Events) {
     this.Events = Events;
-    this.monk = monk;
   }
 
   async createEvent (ctx, next) {
@@ -18,30 +20,31 @@ class EventsController {
       place_name: ctx.request.body.place_name,
       place_address: ctx.request.body.place_address,
       location: ctx.request.body.location,
+      place_url: ctx.request.body.place_url ? ctx.request.body.place_url : '',
       when: ctx.request.body.when,
       creator: ctx.user._id,
       attendees: [ctx.user._id]
     };
     try {
       for (const key in newEvent) {
-        if (!newEvent[key]) throw `Empty parameter ${[key]}`;
+        if (!newEvent[key]) return (ctx.status = 400);
       }
       if (
         !ctx.request.body.location.coordinates[1] ||
         !ctx.request.body.location.coordinates[0]
       )
-        throw 'Latitude and or Longitude element not found in coordinates key';
-      if (!regexLat.test(ctx.request.body.location.coordinates[0]))
-        throw 'Not a valid Latitude coordinate input number';
-      if (!regexLng.test(ctx.request.body.location.coordinates[1]))
-        throw 'Not a valid Longitude coordinate input number';
+        return (ctx.status = 400);
+      if (
+        !regexLat.test(ctx.request.body.location.coordinates[1]) ||
+        !regexLng.test(ctx.request.body.location.coordinates[0])
+      )
+        return (ctx.status = 400);
       const event = await this.Events.insert(newEvent);
       ctx.status = 201;
-      ctx.body = JSON.stringify({ event: event });
+      ctx.body = { event };
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('Event create error: ', e);
-      ctx.status = 400;
+      Raven.captureException(e);
+      ctx.status = 500;
     }
   }
 
@@ -49,64 +52,65 @@ class EventsController {
     if ('PUT' != ctx.method) return await next();
     try {
       for (const key in ctx.request.body) {
-        if (!ctx.request.body[key]) throw `Empty input parameter ${[key]}`;
+        if (!ctx.request.body[key]) return (ctx.status = 400);
       }
       if (
-        !ctx.request.body.location.coordinates[1] ||
-        !ctx.request.body.location.coordinates[0]
+        !Array.isArray(ctx.request.body.location.coordinates) ||
+        ctx.request.body.location.coordinates.length != 2
       )
-        throw 'Latitude and or Longitude element not found in coordinates key';
-      if (!regexLat.test(ctx.request.body.location.coordinates[0]))
-        throw 'Not a valid Latitude coordinate input number';
-      if (!regexLng.test(ctx.request.body.location.coordinates[1]))
-        throw 'Not a valid Longitude coordinate input number';
+        return (ctx.status = 400);
+      if (
+        !regexLat.test(ctx.request.body.location.coordinates[1]) ||
+        !regexLng.test(ctx.request.body.location.coordinates[0])
+      )
+        return (ctx.status = 400);
+      const paramId = ctx.params.id;
       const updateResult = await this.Events.update(
-        { _id: ctx.params.id },
+        { _id: paramId },
         {
           $set: {
             place_id: ctx.request.body.place_id,
             place_name: ctx.request.body.place_name,
             place_address: ctx.request.body.place_address,
             location: ctx.request.body.location,
+            place_url: ctx.request.body.place_url,
             when: ctx.request.body.when
           }
         }
       );
-      if (updateResult.nMatched === 0) throw `Event ${ctx.params.id} not found`;
+      if (updateResult.nMatched === 0) return (ctx.status = 404);
       ctx.status = 204;
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('Modify create error: ', e);
-      ctx.status = 400;
+      Raven.captureException(e);
+      ctx.status = 500;
     }
   }
 
   async deleteEvent (ctx, next) {
     if ('DELETE' != ctx.method) return await next();
     try {
+      const paramId = ctx.params.id;
       const event = await this.Events.findOne({
-        _id: ctx.params.id,
+        _id: paramId,
         creator: ctx.user._id
       });
-      if (event && event.attendees.length === 1)
-        await this.Events.remove({ _id: this.monk.id(ctx.params.id) });
-      else
-        throw `Event not present or only one attendee. attendees array -> ${Array.isArray(
-          event.attendees
-        )}, array length ${event.attendees.length}`;
+      if (event && event.attendees.length === 1) {
+        await this.Events.remove({ _id: paramId });
+      } else return (ctx.status = 404);
       ctx.status = 204;
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('Deleting event error: ', e);
-      ctx.status = 400;
+      Raven.captureException(e);
+      ctx.status = 500;
     }
   }
 
   async getEvent (ctx, next) {
     if ('GET' != ctx.method) return await next();
     try {
+      const paramId = ctx.params.id;
+
       const event = await this.Events.aggregate([
-        { $match: { _id: this.monk.id(ctx.params.id) } },
+        { $match: { _id: paramId } },
         {
           $lookup: {
             from: 'users',
@@ -131,59 +135,56 @@ class EventsController {
           }
         }
       ]);
-
       ctx.status = 200;
       ctx.body = event;
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('Get Single Event error', e);
+      Raven.captureException(e);
+      cotx.status = 500;
     }
   }
 
   async joinEvent (ctx, next) {
     if ('PUT' != ctx.method) return await next();
     try {
+      const paramId = ctx.params.id;
       const updateResult = await this.Events.update(
-        { _id: ctx.params.id, 'attendees.3': { $exists: false } },
+        { _id: paramId, 'attendees.3': { $exists: false } },
         { $addToSet: { attendees: ctx.user._id } }
       );
-      if (updateResult.nMatched === 0) throw `Event ${ctx.params.id} not found`;
-      ctx.status = 204;
-      // console.log( await this.Events.findOne({_id: ctx.params.id}));
+      if (updateResult.nMatched === 0) return (ctx.status = 404); //throw `Event ${ctx.params.id} not found`;
+      ctx.body = { join: 'ok' };
+      ctx.status = 200;
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('Update user error', e);
-      ctx.status = 400;
+      Raven.captureException(e);
+      ctx.status = 500;
     }
   }
 
   async leaveEvent (ctx, next) {
     if ('DELETE' != ctx.method) return await next();
+    const paramId = ctx.params.id;
     let event = await this.Events.findOne({
-      _id: ctx.params.id,
+      _id: paramId,
       attendees: ctx.user._id,
       'attendees.1': { $exists: true }
     });
-    // if (!event) throw `Error, event ${ctx.params.id} not found`;
-    // console.log('event', event);
     if (JSON.stringify(event.creator) === JSON.stringify(ctx.user._id)) {
       event.creator = event.attendees[1];
     }
     try {
       const update = await this.Events.update(
-        { _id: ctx.params.id },
+        { _id: paramId },
         {
           $pull: { attendees: ctx.user._id },
           $set: { creator: event.creator }
         }
       );
-      event = await this.Events.findOne({ _id: ctx.params.id });
-      ctx.body = JSON.stringify({ event: event });
+      event = await this.Events.findOne({ _id: paramId });
+      ctx.body = { event };
       ctx.status = 200;
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('Leave event error: ', e);
-      ctx.status = 400;
+      Raven.captureException(e);
+      ctx.status = 500;
     }
   }
 
@@ -191,11 +192,12 @@ class EventsController {
     if ('GET' != ctx.method) return await next();
     try {
       if (!ctx.request.query.lat || !ctx.request.query.lng)
-        throw 'Latitude and or Longitude not present';
-      if (!regexLat.test(ctx.request.query.lat))
-        throw 'Received an invalid Latitude coordinate query parameter';
-      if (!regexLng.test(ctx.request.query.lng))
-        throw 'Received an invalid Longitude coordinate query parameter';
+        return (ctx.status = 400);
+      if (
+        !regexLat.test(ctx.request.query.lat) ||
+        !regexLng.test(ctx.request.query.lng)
+      )
+        return (ctx.status = 400);
       const lat = Number(ctx.request.query.lat);
       const lng = Number(ctx.request.query.lng);
       const distance = Number(ctx.request.query.dist)
@@ -209,11 +211,11 @@ class EventsController {
         : Date.now();
       const to = Number(ctx.request.query.to)
         ? Number(ctx.request.query.to)
-        : Date.now() + 3600 * 24 * 7;
-      const events = await this.Events.aggregate([
+        : Date.now() + 3600 * 24 * 7 * 1000;
+      const aggeregationQuery = [
         {
           $geoNear: {
-            near: { type: 'Point', coordinates: [lat, lng] },
+            near: { type: 'Point', coordinates: [lng, lat] },
             distanceField: 'distance',
             maxDistance: distance,
             query: { when: { $gte: from, $lte: to } },
@@ -242,21 +244,22 @@ class EventsController {
             'attendees.description': 0,
             'attendees.interests': 0
           }
-        },
-        { $sort: { attendees: -1 } },
-        { $sort: { 'attendees.ratings_average': -1 } }
-      ]);
-      // console.log(events);
+        }
+      ];
+      ctx.request.query.sort
+        ? aggeregationQuery.push(
+          { $sort: { attendees: -1 } },
+          { $sort: { 'attendees.ratings_average': -1 } }
+        )
+        : null;
+      const events = await this.Events.aggregate(aggeregationQuery);
       ctx.status = 200;
-      ctx.body = JSON.stringify(events);
+      ctx.body = ctx.request.query.sort ? (events[0] ? events[0] : []) : events;
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error(`getEvents error ${e}`);
-      ctx.status = 400;
+      Raven.captureException(e);
+      ctx.status = 500;
     }
   }
 }
 
 module.exports = EventsController;
-
-// 'attendees.ratings_average': 0,
