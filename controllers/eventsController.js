@@ -139,7 +139,7 @@ class EventsController {
       ctx.body = event;
     } catch (e) {
       Raven.captureException(e);
-      cotx.status = 500;
+      ctx.status = 500;
     }
   }
 
