@@ -15,6 +15,7 @@ module.exports = {
   },
   linkedin: {
     apiUrl:
-      'https://api.linkedin.com/v1/people/~:(id,formatted-name,num-connections,picture-url,email-address)?format=json'
+      'https://api.linkedin.com/v1/people/~:(id,formatted-name,num-connections,picture-url,email-address,positions:(id,title,summary,start-date,end-date,is-current,company:(id,name,type,size,industry,ticker)))?format=json',
+    state: 'kjadsfjk4q8uas8uasdjkwaekfj4'
   }
 };
