@@ -230,7 +230,7 @@ class UsersController {
             name: authResult.data.formattedName,
             email: authResult.data.emailAddress,
             profile_picture: authResult.data.pictureUrl,
-            profession: authResult.data.positions.values[0].title,
+            profession: !authResult.data.positions.values ? '' : authResult.data.positions.values[0].title,
             position: ctx.request.body.position,
             accessToken: `LI${ctx.request.body.accessToken}`
           };
