@@ -1,3 +1,4 @@
+const bcrypt = require('bcrypt');
 
 let restaurant = {
   name: '',
@@ -17,41 +18,46 @@ class RestaurantsController {
   async createRestaurant (ctx, next) {
     if (ctx.method !== 'POST') return await next();
     //if none of this -> error
-    let { name , password , mail, seats, owner, address} = ctx.request.body;
-    // const requirement = ((name &&
-    // password &&
-    // mail &&
-    // seats &&
-    // owner &&
-    // address));
-    // console.log(name);
+    let { email , password } = ctx.request.body;
 
-    // if (!requirement) {
-    //   ctx.status = 400;
-    //   ctx.body = 'Please complete all fields';
-    // }
+    if (!email ) {
+      ctx.status = 400;
+      ctx.body = 'Please complete all fields';
+      return;
+    }
+    if (!password ) {
+      ctx.status = 400;
+      ctx.body = 'Please complete all fields';
+      return;
+    }
 
+    try {
+      const emailCheck = await this.Restaurants.findOne({email});
+      if (emailCheck) {
+        ctx.status = 400;
+        ctx.body = 'User already exists \nPlease choose another email';
+        return;
+      }
+    } catch (e) {
+      Raven.captureException(e);
+      cts.status = 500;
+    }
+    // TRY CATCH HERE????
     //password encryption
-    const bcrypt = require('bcrypt');
 
     let hashed = bcrypt.hashSync(password, 10);
 
     const newRestaurant = {
-      name,
+      email,
       hashed,
-      mail,
-      seats,
-      owner,
-      address,
     };
 
     const restaurant = await this.Restaurants.insert(newRestaurant);
-    console.log(restaurant);
 
     const accessToken = restaurant._id;
     ctx.status = 201;
     ctx.body = {
-      mail,
+      email,
       accessToken
     } ;
   }
