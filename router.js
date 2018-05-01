@@ -4,6 +4,7 @@ const router = require('koa-router')();
 const UsersController = require('./controllers/usersController');
 const EventsController = require('./controllers/eventsController');
 const RatingsController = require('./controllers/ratingsController');
+const RestaurantsController = require('./controllers/restaurantsController');
 
 // MongoDb configure
 const monk = require('monk');
@@ -13,6 +14,7 @@ const db = monk(process.env.MONGOLAB_URI);
 const Events = db.get('events');
 const Users = db.get('users');
 const Ratings = db.get('ratings');
+const Restaurants = db.get('restaurants');
 
 // Geo Indexing for MongoDb
 Events.createIndex({ location: '2dsphere' });
@@ -21,6 +23,7 @@ const eventsController = new EventsController(Events);
 const ratingsController = new RatingsController(Ratings, Users);
 // monk here is mandatory!
 const usersController = new UsersController(Users, Events, monk, Ratings);
+const restaurantsController = new RestaurantsController(Restaurants);
 
 const authorize = async (ctx, next) => {
   if (!ctx.user) {
@@ -57,7 +60,7 @@ const routes = function (app) {
     )
     .post(
       '/api/v1/events',
-      authorize,
+      // authorize,
       eventsController.createEvent.bind(eventsController)
     )
     .put(
@@ -90,6 +93,16 @@ const routes = function (app) {
       authorize,
       eventsController.getEvents.bind(eventsController)
     )
+
+    .post(
+      '/restaurant',
+      restaurantsController.createRestaurant.bind(restaurantsController)
+    )
+
+    // .get(
+    //   '/restaurant/sign-in',
+    //   restaurantsController
+    // )
 
     .options('/', options)
     .trace('/', trace)

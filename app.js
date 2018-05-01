@@ -10,6 +10,8 @@ const monk = require('monk');
 const app = (module.exports = new koa());
 const routes = require('./router.js');
 const db = monk(process.env.MONGOLAB_URI);
+db.then(()=> {console.log('Connected correctly to server')})
+
 const User = db.get('users');
 const Raven = require('raven');
 
