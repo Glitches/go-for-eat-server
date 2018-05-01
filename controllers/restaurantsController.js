@@ -16,17 +16,44 @@ class RestaurantsController {
 
   async createRestaurant (ctx, next) {
     if (ctx.method !== 'POST') return await next();
+    //if none of this -> error
+    let { name , password , mail, seats, owner, address} = ctx.request.body;
+    // const requirement = ((name &&
+    // password &&
+    // mail &&
+    // seats &&
+    // owner &&
+    // address));
+    // console.log(name);
+
+    // if (!requirement) {
+    //   ctx.status = 400;
+    //   ctx.body = 'Please complete all fields';
+    // }
+
+    //password encryption
+    const bcrypt = require('bcrypt');
+
+    let hashed = bcrypt.hashSync(password, 10);
+
     const newRestaurant = {
-      name: ctx.request.body.name,
-      mail: ctx.request.body.mail,
-      seats: ctx.request.body.seats,
-      owner: ctx.request.body.owner,
-      address: ctx.request.body.address
+      name,
+      hashed,
+      mail,
+      seats,
+      owner,
+      address,
     };
 
     const restaurant = await this.Restaurants.insert(newRestaurant);
+    console.log(restaurant);
+
+    const accessToken = restaurant._id;
     ctx.status = 201;
-    ctx.body = { restaurant };
+    ctx.body = {
+      mail,
+      accessToken
+    } ;
   }
 }
 

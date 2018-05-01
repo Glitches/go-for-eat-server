@@ -23,6 +23,7 @@ app
   .use(helmet())
   .use(cors())
   .use(bodyParser())
+  // error handling
   .use(async (ctx, next) => {
     try {
       await next();
@@ -46,6 +47,7 @@ app
       }
     }
   })
+  //authentication middleware
   .use(async (ctx, next) => {
     let authorization = ctx.headers.authorization;
     if (!authorization || authorization.split(' ')[0] != 'Bearer')
@@ -63,7 +65,10 @@ app.use(compress());
 
 // Raven
 app.on('error', async err => {
+  console.error(err);
   await Raven.captureException(err, (err, eventId) => {
+
+
     //eslint-disable-next-line no-console
     console.log(`Reported error ${eventId}`);
   });
