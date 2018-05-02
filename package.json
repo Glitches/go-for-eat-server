@@ -17,7 +17,8 @@
     "koa-router": "^7.3.0",
     "lodash": "^4.17.4",
     "monk": "^6.0.5",
-    "raven": "^2.4.0"
+    "raven": "^2.4.0",
+    "uuid": "^3.2.1"
   },
   "devDependencies": {
     "babel-cli": "^6.26.0",

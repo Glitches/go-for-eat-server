@@ -3,7 +3,8 @@
 const config = require('../config.js');
 const Raven = require('raven');
 
-Raven.config(process.env.SENTRY_DSN).install();
+process.env.ENV === 'production' &&
+  Raven.config(process.env.SENTRY_DSN).install();
 
 const regexLat = /^[-+]?([1-8]?\d(\.\d+)?|90(\.0+)?)$/;
 const regexLng = /^[-+]?(180(\.0+)?|((1[0-7]\d)|([1-9]?\d))(\.\d+)?)$/;

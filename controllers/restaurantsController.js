@@ -2,6 +2,8 @@
 
 const Raven = require('raven');
 const bcrypt = require('bcrypt');
+const uuid = require('uuid/v4');
+const base64 = require('base-64');
 
 // let restaurant = {
 //   name: '',
@@ -45,21 +47,51 @@ class RestaurantsController {
 
     const hashed = bcrypt.hashSync(password, 10);
 
-
     const newRestaurant = {
       email,
       hashed,
       timestamp: Date.now(),
+      accessToken: '--r--' + uuid(),
     };
 
     const restaurant = await this.Restaurants.insert(newRestaurant);
 
-    const accessToken = restaurant._id;
     ctx.status = 201;
     ctx.body = {
-      email,
-      accessToken
+      id: restaurant._id,
+      email: restaurant.email,
+      accessToken: restaurant.accessToken
     } ;
+  }
+
+  async signIn (ctx) {
+    let authorization = ctx.headers.authorization;
+    console.log('HERES AUTHORIZATION', authorization);
+
+    if ((authorization) && authorization.split(' ')[0] === 'Basic') {
+      console.log('INSIDE REST AUTH');
+
+      ctx.pass64 = authorization.split(' ')[1];
+      console.log('PASS64', ctx.pass64);
+
+      const pass = base64.decode(ctx.pass64).split(':')[1];
+      console.log('pass,decrypted',pass);
+
+      const email = base64.decode(ctx.pass64).split(':')[0];
+      console.log('user decrypted',email);
+
+      const target = await this.Restaurants.findOne({ email });
+      console.log('TARGET PASS',target.hashed);
+
+      const res = await bcrypt.compare(pass, target.hashed);
+      if (res) ctx.user = target;
+    }
+
+    ctx.body = ctx.user;
+  }
+
+  async me (ctx) {
+    ctx.body = ctx.user;
   }
 
 }

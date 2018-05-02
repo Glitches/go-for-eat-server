@@ -103,7 +103,7 @@ class MeetingsController {
   }
 
   async editMeeting (ctx, next) {
-
+    const restaurant = ctx.user;
   }
 
 }

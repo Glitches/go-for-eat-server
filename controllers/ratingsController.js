@@ -5,7 +5,8 @@ const monk = require('monk');
 const db = monk(process.env.MONGOLAB_URI);
 const Raven = require('raven');
 
-Raven.config(process.env.SENTRY_DSN).install();
+process.env.ENV === 'production' &&
+  Raven.config(process.env.SENTRY_DSN).install();
 
 class RatingsController {
   constructor (Ratings, Users) {
