@@ -212,6 +212,9 @@ class EventsController {
       const to = Number(ctx.request.query.to)
         ? Number(ctx.request.query.to)
         : Date.now() + 3600 * 24 * 7 * 1000;
+      const ratings = Number(ctx.request.query.ratings)
+        ? Number(ctx.request.query.ratings)
+        : 0;
       const aggeregationQuery = [
         {
           $geoNear: {
@@ -244,7 +247,12 @@ class EventsController {
             'attendees.description': 0,
             'attendees.interests': 0
           }
-        }
+        },
+        {
+          $match: {
+            'attendees.ratings_average': { $gte: ratings },
+          }
+        },
       ];
       ctx.request.query.sort
         ? aggeregationQuery.push(
