@@ -4,25 +4,45 @@ const router = require('koa-router')();
 const UsersController = require('./controllers/usersController');
 const EventsController = require('./controllers/eventsController');
 const RatingsController = require('./controllers/ratingsController');
+const RestaurantsController = require('./controllers/restaurantsController');
+const MeetingsController = require('./controllers/meetingsController');
 
 // MongoDb configure
 const monk = require('monk');
 const db = monk(process.env.MONGOLAB_URI);
 
 // Creating Db instances
-const Events = db.get('events');
-const Users = db.get('users');
-const Ratings = db.get('ratings');
+const Event = db.get('events');
+const User = db.get('users');
+const Rating = db.get('ratings');
+const Restaurant = db.get('restaurants');
+const Meeting = db.get('meetings');
 
 // Geo Indexing for MongoDb
-Events.createIndex({ location: '2dsphere' });
+Event.createIndex({ location: '2dsphere' });
 
-const eventsController = new EventsController(Events);
-const ratingsController = new RatingsController(Ratings, Users);
+const eventsController = new EventsController(Event);
+const ratingsController = new RatingsController(Rating, User);
 // monk here is mandatory!
-const usersController = new UsersController(Users, Events, monk, Ratings);
+const usersController = new UsersController(User, Event, monk, Rating);
+
+const restaurantsController = new RestaurantsController(Restaurant);
+const meetingsController = new MeetingsController(Meeting);
 
 const authorize = async (ctx, next) => {
+  let authorization = ctx.headers.authorization;
+
+  if (!authorization || authorization.split(' ')[0] != 'Bearer') {
+    ctx.status = 401;
+    return;
+  }
+  ctx.token = authorization.split(' ')[1];
+
+  let Resource = User;
+  if (ctx.token.startsWith('--r--')) Resource = Restaurant;
+
+  ctx.user = await Resource.findOne({ accessToken: ctx.token });
+
   if (!ctx.user) {
     ctx.status = 401;
     return;
@@ -89,6 +109,35 @@ const routes = function (app) {
       '/api/v1/events',
       authorize,
       eventsController.getEvents.bind(eventsController)
+    )
+
+    .post(
+      '/restaurant',
+      restaurantsController.createRestaurant.bind(restaurantsController)
+    )
+
+    //PREGUNTAR A AROL POR ESTO @@@@@@@@@@@@@#################
+    .get(
+      '/restaurant/sign-in',
+      restaurantsController.signIn.bind(restaurantsController)
+    )
+
+    .get(
+      '/restaurant/me',
+      authorize,
+      restaurantsController.me.bind(restaurantsController)
+    )
+
+    .post(
+      '/restaurant/createEvents',
+      authorize,
+      meetingsController.createMeeting.bind(meetingsController)
+    )
+
+    .put(
+      '/restaurants/events/:event_id',
+      authorize,
+      meetingsController.editMeeting.bind(meetingsController),
     )
 
     .options('/', options)

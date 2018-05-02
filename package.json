@@ -5,6 +5,8 @@
   "main": "app.js",
   "dependencies": {
     "axios": "^0.17.1",
+    "base-64": "^0.1.0",
+    "bcrypt": "^2.0.1",
     "dotenv": "^4.0.0",
     "kcors": "^2.2.1",
     "koa": "^2.4.1",
@@ -15,7 +17,8 @@
     "koa-router": "^7.3.0",
     "lodash": "^4.17.4",
     "monk": "^6.0.5",
-    "raven": "^2.4.0"
+    "raven": "^2.4.0",
+    "uuid": "^3.2.1"
   },
   "devDependencies": {
     "babel-cli": "^6.26.0",

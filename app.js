@@ -10,10 +10,16 @@ const monk = require('monk');
 const app = (module.exports = new koa());
 const routes = require('./router.js');
 const db = monk(process.env.MONGOLAB_URI);
+//eslint-disable-next-line
+db.then(()=> {console.log('Connected correctly to server')})
+
 const User = db.get('users');
+const Restaurant = db.get('restaurants');
 const Raven = require('raven');
 
-Raven.config(process.env.SENTRY_DSN).install();
+
+process.env.ENV === 'production' &&
+  Raven.config(process.env.SENTRY_DSN).install();
 
 // Logger
 app
@@ -21,6 +27,7 @@ app
   .use(helmet())
   .use(cors())
   .use(bodyParser())
+  // error handling
   .use(async (ctx, next) => {
     try {
       await next();
@@ -43,15 +50,6 @@ app
         ctx.app.emit('error', err, this);
       }
     }
-  })
-  .use(async (ctx, next) => {
-    let authorization = ctx.headers.authorization;
-    if (!authorization || authorization.split(' ')[0] != 'Bearer')
-      return await next();
-    ctx.token = authorization.split(' ')[1];
-    // console.log('authorization accessToken', ctx.token);
-    ctx.user = await User.findOne({ accessToken: ctx.token });
-    return await next();
   });
 
 routes(app);
@@ -61,10 +59,13 @@ app.use(compress());
 
 // Raven
 app.on('error', async err => {
-  await Raven.captureException(err, (err, eventId) => {
-    //eslint-disable-next-line no-console
-    console.log(`Reported error ${eventId}`);
-  });
+  console.error(err);
+
+  process.env.ENV === 'production' &&
+    await Raven.captureException(err, (err, eventId) => {
+      //eslint-disable-next-line
+      console.log(`Reported error ${eventId}`);
+    });
 });
 
 module.exports = app;
