@@ -325,6 +325,7 @@ class UsersController {
             : ctx.request.body.edit.description;
       }
       if (ctx.request.body.edit.profession) {
+        console.log('edit profession', ctx.request.body.edit.profession);
         update.$set.profession =
           ctx.request.body.edit.profession.length >= 140
             ? ctx.request.body.edit.profession.substring(0, 139)
@@ -353,7 +354,7 @@ class UsersController {
         { _id: ctx.user._id },
         update
       );
-      if (!resultUpdate.nMatched) return (ctx.status = 404);
+      if (!resultUpdate.nModified) return (ctx.status = 404);
       ctx.body = await this.Users.findOne({ _id: ctx.user._id });
       ctx.status = 204;
     } catch (e) {
