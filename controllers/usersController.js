@@ -325,7 +325,6 @@ class UsersController {
             : ctx.request.body.edit.description;
       }
       if (ctx.request.body.edit.profession) {
-        console.log('edit profession', ctx.request.body.edit.profession);
         update.$set.profession =
           ctx.request.body.edit.profession.length >= 140
             ? ctx.request.body.edit.profession.substring(0, 139)
