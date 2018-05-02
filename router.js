@@ -5,6 +5,7 @@ const UsersController = require('./controllers/usersController');
 const EventsController = require('./controllers/eventsController');
 const RatingsController = require('./controllers/ratingsController');
 const RestaurantsController = require('./controllers/restaurantsController');
+const MeetingsController = require('./controllers/meetingsController');
 
 // MongoDb configure
 const monk = require('monk');
@@ -15,6 +16,7 @@ const Events = db.get('events');
 const Users = db.get('users');
 const Ratings = db.get('ratings');
 const Restaurants = db.get('restaurants');
+const Meetings = db.get('meetings');
 
 // Geo Indexing for MongoDb
 Events.createIndex({ location: '2dsphere' });
@@ -23,7 +25,9 @@ const eventsController = new EventsController(Events);
 const ratingsController = new RatingsController(Ratings, Users);
 // monk here is mandatory!
 const usersController = new UsersController(Users, Events, monk, Ratings);
+
 const restaurantsController = new RestaurantsController(Restaurants);
+const meetingsController = new MeetingsController(Meetings);
 
 const authorize = async (ctx, next) => {
   if (!ctx.user) {
@@ -60,7 +64,7 @@ const routes = function (app) {
     )
     .post(
       '/api/v1/events',
-      // authorize,
+      authorize,
       eventsController.createEvent.bind(eventsController)
     )
     .put(
@@ -99,10 +103,18 @@ const routes = function (app) {
       restaurantsController.createRestaurant.bind(restaurantsController)
     )
 
+    //PREGUNTAR A AROL POR ESTO @@@@@@@@@@@@@#################
     // .get(
     //   '/restaurant/sign-in',
+    //   authorize,
     //   restaurantsController
     // )
+
+    .post(
+      '/restaurant/createEvents',
+      authorize,
+      meetingsController.createMeeting.bind(meetingsController)
+    )
 
     .options('/', options)
     .trace('/', trace)

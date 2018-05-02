@@ -1,14 +1,17 @@
+'use strict';
+
+const Raven = require('raven');
 const bcrypt = require('bcrypt');
 
-let restaurant = {
-  name: '',
-  email: '',
-  // profile_picture: '',
-  seats: '',
-  owner:'',
-  address: '',
-  accessToken: ''
-};
+// let restaurant = {
+//   name: '',
+//   email: '',
+//   // profile_picture: '',
+//   seats: '',
+//   owner:'',
+//   address: '',
+//   accessToken: ''
+// };
 
 class RestaurantsController {
   constructor (Restaurants) {
@@ -17,15 +20,10 @@ class RestaurantsController {
 
   async createRestaurant (ctx, next) {
     if (ctx.method !== 'POST') return await next();
-    //if none of this -> error
+
     let { email , password } = ctx.request.body;
 
-    if (!email ) {
-      ctx.status = 400;
-      ctx.body = 'Please complete all fields';
-      return;
-    }
-    if (!password ) {
+    if (!email || !password) {
       ctx.status = 400;
       ctx.body = 'Please complete all fields';
       return;
@@ -42,14 +40,16 @@ class RestaurantsController {
       Raven.captureException(e);
       cts.status = 500;
     }
-    // TRY CATCH HERE????
+
     //password encryption
 
-    let hashed = bcrypt.hashSync(password, 10);
+    const hashed = bcrypt.hashSync(password, 10);
+
 
     const newRestaurant = {
       email,
       hashed,
+      timestamp: Date.now(),
     };
 
     const restaurant = await this.Restaurants.insert(newRestaurant);
@@ -61,6 +61,7 @@ class RestaurantsController {
       accessToken
     } ;
   }
+
 }
 
 module.exports = RestaurantsController;

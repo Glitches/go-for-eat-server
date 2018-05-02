@@ -5,6 +5,7 @@
   "main": "app.js",
   "dependencies": {
     "axios": "^0.17.1",
+    "base-64": "^0.1.0",
     "bcrypt": "^2.0.1",
     "dotenv": "^4.0.0",
     "kcors": "^2.2.1",
