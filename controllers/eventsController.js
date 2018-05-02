@@ -215,6 +215,9 @@ class EventsController {
       const ratings = Number(ctx.request.query.ratings)
         ? Number(ctx.request.query.ratings)
         : 0;
+      const profession = ctx.request.query.profession
+        ? ctx.request.query.profession
+        : ''
       const aggeregationQuery = [
         {
           $geoNear: {
@@ -243,7 +246,6 @@ class EventsController {
             'attendees.created_events': 0,
             'attendees.accessToken': 0,
             'attendees.ratings_number': 0,
-            'attendees.profession': 0,
             'attendees.description': 0,
             'attendees.interests': 0
           }
@@ -251,6 +253,8 @@ class EventsController {
         {
           $match: {
             'attendees.ratings_average': { $gte: ratings },
+            'attendees.profession': { $regex: new RegExp(profession, 'i') },
+            // 'attendees.profession': { $regex: /^.*?\b.*profession?.*\b.*$/gi },
           }
         },
       ];
