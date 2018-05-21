@@ -139,7 +139,7 @@ class EventsController {
       ctx.body = event;
     } catch (e) {
       Raven.captureException(e);
-      cotx.status = 500;
+      ctx.status = 500;
     }
   }
 
@@ -212,6 +212,12 @@ class EventsController {
       const to = Number(ctx.request.query.to)
         ? Number(ctx.request.query.to)
         : Date.now() + 3600 * 24 * 7 * 1000;
+      const ratings = Number(ctx.request.query.ratings)
+        ? Number(ctx.request.query.ratings)
+        : 0;
+      const profession = ctx.request.query.profession
+        ? ctx.request.query.profession
+        : ''
       const aggeregationQuery = [
         {
           $geoNear: {
@@ -240,11 +246,17 @@ class EventsController {
             'attendees.created_events': 0,
             'attendees.accessToken': 0,
             'attendees.ratings_number': 0,
-            'attendees.profession': 0,
             'attendees.description': 0,
             'attendees.interests': 0
           }
-        }
+        },
+        {
+          $match: {
+            'attendees.ratings_average': { $gte: ratings },
+            'attendees.profession': { $regex: new RegExp(profession, 'i') },
+            // 'attendees.profession': { $regex: /^.*?\b.*profession?.*\b.*$/gi },
+          }
+        },
       ];
       ctx.request.query.sort
         ? aggeregationQuery.push(

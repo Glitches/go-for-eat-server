@@ -78,7 +78,7 @@ class UsersController {
     if (!user) {
       try {
         userData.ratings_number = userData.ratings_average = 0;
-        userData.description = userData.profession = '';
+        userData.description = '';
         userData.interests = '';
         return await this.Users.insert(userData);
       } catch (e) {
@@ -97,6 +97,7 @@ class UsersController {
               birthday: userData.birthday,
               gender: userData.gender,
               position: userData.position,
+              profession: userData.profession,
               accessToken: userData.accessToken
             }
           }
@@ -115,7 +116,7 @@ class UsersController {
       ctx.status = 400;
       ctx.body = 'Latitude coordinate not present';
     }
-    if (!ctx.request.body.position.lat) {
+    if (!ctx.request.body.position.lng) {
       ctx.status = 400;
       ctx.body = 'Longitude coordinate not present';
     }
@@ -224,12 +225,12 @@ class UsersController {
             Authorization: `Bearer ${ctx.request.body.accessToken}`
           }
         });
-        if (authResult.data.id == ctx.request.body.id) {
+        if (authResult.data.id) {
           user = {
             name: authResult.data.formattedName,
             email: authResult.data.emailAddress,
-            profile_picture: authResult.data.picture.data.pictureUrl,
-            profession: authResult.data.position,
+            profile_picture: authResult.data.pictureUrl,
+            profession: !authResult.data.positions.values ? '' : authResult.data.positions.values[0].title,
             position: ctx.request.body.position,
             accessToken: `LI${ctx.request.body.accessToken}`
           };
@@ -352,7 +353,7 @@ class UsersController {
         { _id: ctx.user._id },
         update
       );
-      if (!resultUpdate.nMatched) return (ctx.status = 404);
+      if (!resultUpdate.nModified) return (ctx.status = 404);
       ctx.body = await this.Users.findOne({ _id: ctx.user._id });
       ctx.status = 204;
     } catch (e) {
